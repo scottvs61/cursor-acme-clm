@@ -1,0 +1,51 @@
+# Copy to config.yaml and set values. Secrets can use env vars: ${DIGICERT_API_KEY}
+
+app:
+  acme_base_url: "http://localhost:8000"
+  clm_base_url: "http://localhost:8001"
+  # When ACME issues a cert, it POSTs here (optional; leave empty to disable)
+  clm_ingest_url: "http://localhost:8001/api/events/issued"
+
+# CA-agnostic: list of CAs; "default" is used when no ca_name is specified
+cas:
+  default: digicert_one_tlm
+
+  digicert_one_tlm:
+    type: digicert_one_tlm
+    base_url: "https://demo.one.digicert.com"
+    # Env override: DIGICERT_ONE_API_KEY, DIGICERT_ONE_PROFILE_ID, etc.
+    api_key: "${DIGICERT_ONE_API_KEY}"
+    profile_id: "${DIGICERT_ONE_PROFILE_ID}"
+    seat_id: "${DIGICERT_ONE_SEAT_ID}"
+    account_id: "${DIGICERT_ONE_ACCOUNT_ID}"
+
+  digicert_certcentral:
+    type: digicert_certcentral
+    base_url: "https://api.digicert.com"
+    api_key: "${DIGICERT_CERTCENTRAL_API_KEY}"
+    # CertCentral-specific: product, template, etc.
+    product_name_id: "${DIGICERT_CERTCENTRAL_PRODUCT_NAME_ID}"
+    # Optional
+    organization_id: "${DIGICERT_CERTCENTRAL_ORG_ID}"
+
+scep:
+  base_url: "http://localhost:8002"
+  ca_cert_pem: ""
+  default_product_id: "${SCEP_DEFAULT_PRODUCT_ID}"
+
+# Optional: push certificate records to ServiceNow CMDB
+servicenow:
+  enabled: false
+  instance: "https://your-instance.service-now.com"
+  # Basic auth or OAuth; use env for credentials
+  username: "${SERVICENOW_USERNAME}"
+  password: "${SERVICENOW_PASSWORD}"
+  table: "u_certificate_ci"  # or your CMDB table
+  # Optional: map our fields to ServiceNow columns
+  field_mapping:
+    certificate_id: "u_certificate_id"
+    common_name: "u_common_name"
+    product_id: "u_product_id"
+    sha256_fingerprint: "u_sha256_fingerprint"
+    not_before: "u_not_before"
+    not_after: "u_not_after"
