@@ -6,7 +6,18 @@ clm.db
 .env
 config/config.yaml
 !config/config.example.yaml
+config/initial_admin_password.txt
+initial_admin_password.txt
 node_modules/
 frontend/dist/
 *.log
 .DS_Store
+
+# Test artifacts (keep tmp/*.py scripts)
+tmp/*.key
+tmp/*.crt
+tmp/*.csr
+tmp/*.der
+tmp/*.p12
+tmp/*.pfx
+reqiurements.txt.back

@@ -25,7 +25,7 @@ from acme.app.acme_types import (
     NewOrderRequest,
     OrderStatus,
 )
-from acme.app.acme_jws import get_payload_from_request, jwk_thumbprint
+from acme.app.acme_jws import get_payload_from_request, jwk_thumbprint, verify_jws_signature
 from acme.app.store import get_store
 
 from lib.config import get_app_config, get_ca_config, load_config
@@ -47,8 +47,32 @@ def _base() -> str:
     return get_app_config().get("acme_base_url", "http://localhost:8000").rstrip("/")
 
 
+def _unauthorized(detail: str = "Invalid or missing signature") -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"type": "urn:ietf:params:acme:error:unauthorized", "detail": detail},
+    )
+
+
+def _verify_jws_with_account(body: bytes, protected, store) -> JSONResponse | None:
+    """Verify JWS signature: for newAccount use jwk in protected; otherwise look up account by kid and use stored jwk."""
+    if protected.jwk:
+        public_jwk = protected.jwk
+    else:
+        kid = protected.kid or ""
+        acc = store.get_account_by_kid(kid)
+        if not acc or not acc.jwk:
+            return _unauthorized("Unknown account or missing key")
+        public_jwk = acc.jwk
+    if not verify_jws_signature(body, public_jwk):
+        return _unauthorized("Invalid signature")
+    return None
+
+
 async def _post_issued_to_clm(cert_pem: str, product_id: str | None, source: str, raw: dict) -> None:
     """POST issued cert + product_id to CLM for ingestion (e.g. ServiceNow CMDB)."""
+    from lib.config import get_clm_ingest_secret
+
     url = get_app_config().get("clm_ingest_url", "").strip()
     if not url:
         return
@@ -58,9 +82,13 @@ async def _post_issued_to_clm(cert_pem: str, product_id: str | None, source: str
         "product_id": product_id,
         "raw": raw,
     }
+    headers = {}
+    secret = get_clm_ingest_secret()
+    if secret:
+        headers["X-CLM-Ingest-Secret"] = secret
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.post(url, json=payload)
+            r = await client.post(url, json=payload, headers=headers)
             r.raise_for_status()
     except Exception as e:
         # Log but do not fail ACME response
@@ -93,19 +121,22 @@ async def new_account(request: Request, response: Response):
     except ValueError as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": str(e)})
     store = get_store()
+    if not protected.jwk:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": "Missing jwk in protected header"})
+    err = _verify_jws_with_account(body, protected, store)
+    if err is not None:
+        return err
     if not store.consume_nonce(protected.nonce):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:badNonce", "detail": "Invalid or used nonce"})
     base = _base()
     key_id = f"{base}/account/{uuid.uuid4()}"
-    req = NewAccountRequest.model_validate(payload) if payload else NewAccountRequest()
+    req = NewAccountRequest.model_validate(payload) if payload else NewAccountRequest(product_id="")
     product_id = (req.product_id or "").strip()
     if not product_id:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"type": "urn:ietf:params:acme:error:malformed", "detail": "product_id is required (prototype policy)"},
         )
-    if not protected.jwk:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": "Missing jwk in protected header"})
     thumb = jwk_thumbprint(protected.jwk)
     existing = store.get_account_by_thumbprint(thumb)
     if existing and req.onlyReturnExisting:
@@ -118,7 +149,7 @@ async def new_account(request: Request, response: Response):
         res.headers["Location"] = existing.key_id
         res.headers["Replay-Nonce"] = _nonce()
         return res
-    acc = store.create_account(key_id, thumb, req.contact, product_id=product_id)
+    acc = store.create_account(key_id, thumb, req.contact, product_id=product_id, jwk=protected.jwk)
     res = JSONResponse(
         status_code=status.HTTP_201_CREATED,
         content=AccountResponse(status=AccountStatus.valid, contact=acc.contact).model_dump(exclude_none=True),
@@ -136,6 +167,9 @@ async def new_order(request: Request, response: Response):
     except ValueError as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": str(e)})
     store = get_store()
+    err = _verify_jws_with_account(body, protected, store)
+    if err is not None:
+        return err
     if not store.consume_nonce(protected.nonce):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:badNonce", "detail": "Invalid or used nonce"})
     try:
@@ -196,6 +230,9 @@ async def get_order_POST(order_id: str, request: Request, response: Response):
     except ValueError as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": str(e)})
     store = get_store()
+    err = _verify_jws_with_account(body, protected, store)
+    if err is not None:
+        return err
     if not store.consume_nonce(protected.nonce):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:badNonce", "detail": "Invalid or used nonce"})
     if not store.get_account_by_kid(protected.kid or ""):
@@ -211,6 +248,9 @@ async def finalize_order(order_id: str, request: Request, response: Response):
     except ValueError as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": str(e)})
     store = get_store()
+    err = _verify_jws_with_account(body, protected, store)
+    if err is not None:
+        return err
     if not store.consume_nonce(protected.nonce):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:badNonce", "detail": "Invalid or used nonce"})
     order = store.get_order(order_id)
@@ -296,6 +336,9 @@ async def get_cert_POST(cert_id: str, request: Request, response: Response):
     except ValueError as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:malformed", "detail": str(e)})
     store = get_store()
+    err = _verify_jws_with_account(body, protected, store)
+    if err is not None:
+        return err
     if not store.consume_nonce(protected.nonce):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"type": "urn:ietf:params:acme:error:badNonce", "detail": "Invalid or used nonce"})
     return get_cert_GET(cert_id, response)

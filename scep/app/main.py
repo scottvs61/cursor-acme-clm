@@ -12,7 +12,7 @@ _repo = Path(__file__).resolve().parent.parent.parent
 if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
-from lib.config import load_config, get_app_config, get_scep_config, get_ca_config
+from lib.config import load_config, get_app_config, get_scep_config, get_ca_config, get_scep_required_api_key
 from lib.issuance import IssuanceError, issue_certificate
 
 load_config(_repo / "config" / "config.yaml")
@@ -51,12 +51,30 @@ def get_ca_caps() -> PlainTextResponse:
     return PlainTextResponse(caps.strip())
 
 
+def _check_scep_api_key(request: Request) -> None:
+    """Require X-API-Key when config or CLM DB has SCEP keys. Raises HTTPException 401 on failure."""
+    key = (request.headers.get("X-API-Key") or "").strip()
+    try:
+        from clm.app.key_store import check_scep_key
+        if check_scep_key(key or None):
+            return
+    except Exception:
+        required = get_scep_required_api_key()
+        if not required:
+            return
+        if key != required:
+            raise HTTPException(status_code=401, detail="API key required (X-API-Key)")
+        return
+    raise HTTPException(status_code=401, detail="API key required (X-API-Key)")
+
+
 @app.post("/PKIOperation")
 async def pki_operation(request: Request):
     """
     SCEP enrollment: accept PKCS#7 message (form message=) or JSON { "csr_pem": "..." }.
     Issues cert via configured CA, ingests to CLM, returns cert PEM.
     """
+    _check_scep_api_key(request)
     content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
     csr_pem: str | None = None
     product_id = get_scep_config().get("default_product_id") or None
@@ -91,8 +109,15 @@ async def pki_operation(request: Request):
     if not csr_pem or "BEGIN CERTIFICATE REQUEST" not in csr_pem:
         raise HTTPException(status_code=400, detail="Missing csr_pem (PEM CSR) or valid SCEP message")
 
+    pid = (product_id or "").strip() if product_id else ""
+    if not pid:
+        raise HTTPException(
+            status_code=400,
+            detail="product_id is required. Provide it in the request (JSON product_id or form product_id) or set scep.default_product_id in config.",
+        )
+
     try:
-        cert_pem = issue_certificate(csr_pem, product_id=product_id)
+        cert_pem = issue_certificate(csr_pem, product_id=pid)
     except IssuanceError as e:
         raise HTTPException(status_code=400, detail=f"CA rejected request: {e}") from e
 
@@ -100,15 +125,22 @@ async def pki_operation(request: Request):
     clm_url = get_app_config().get("clm_ingest_url", "").strip()
     if clm_url:
         try:
+            from lib.config import get_clm_ingest_secret
+
+            headers = {}
+            secret = get_clm_ingest_secret()
+            if secret:
+                headers["X-CLM-Ingest-Secret"] = secret
             async with httpx.AsyncClient(timeout=15.0) as client:
                 await client.post(
                     clm_url,
                     json={
                         "certificate_pem": cert_pem,
                         "source": "scep",
-                        "product_id": product_id,
+                        "product_id": pid,
                         "raw": {"scep": True},
                     },
+                    headers=headers,
                 )
         except Exception:
             pass

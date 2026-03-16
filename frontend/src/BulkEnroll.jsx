@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
-
-const API = ''
+import { apiFetch } from './api'
 
 export default function BulkEnroll() {
   const [csrText, setCsrText] = useState('')
@@ -30,6 +29,10 @@ export default function BulkEnroll() {
 
   function handleSubmit(e) {
     e.preventDefault()
+    if (!defaultProductId.trim()) {
+      setError('Default Product ID is required for all enrollments.')
+      return
+    }
     const pems = parseCSRs(csrText.trim())
     if (!pems.length) {
       setError('No PEM CSRs found. Paste one or more -----BEGIN CERTIFICATE REQUEST----- ... -----END CERTIFICATE REQUEST----- blocks.')
@@ -42,12 +45,11 @@ export default function BulkEnroll() {
     setLoading(true)
     setError(null)
     setResult(null)
-    fetch(`${API}/api/bulk/enroll`, {
+    apiFetch('/bulk/enroll', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         requests: pems.map(csr_pem => ({ csr_pem, product_id: null })),
-        default_product_id: defaultProductId.trim() || null,
+        default_product_id: defaultProductId.trim(),
       }),
     })
       .then(r => r.json().then(data => ({ ok: r.ok, data })))
@@ -63,17 +65,18 @@ export default function BulkEnroll() {
     <>
       <h1 className="page-title">Bulk enrollment</h1>
       <div className="alert alert-info">
-        Paste one or more PEM CSRs below (each starting with <code>-----BEGIN CERTIFICATE REQUEST-----</code>). Optional: set a default Product ID for all. Maximum 100 per request.
+        Paste one or more PEM CSRs below (each starting with <code>-----BEGIN CERTIFICATE REQUEST-----</code>). Product ID is required: set the default for all CSRs. Maximum 100 per request.
       </div>
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>Default Product ID (optional)</label>
+          <label>Default Product ID (required)</label>
           <input
             type="text"
             value={defaultProductId}
             onChange={e => setDefaultProductId(e.target.value)}
             placeholder="e.g. my-product"
+            required
           />
         </div>
         <div className="form-group">

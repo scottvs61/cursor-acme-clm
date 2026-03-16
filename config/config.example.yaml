@@ -1,10 +1,30 @@
 # Copy to config.yaml and set values. Secrets can use env vars: ${DIGICERT_API_KEY}
 
+# Optional: API keys and role-based access. If api_keys is set, CLM API requires X-API-Key and enforces roles.
+# scep_required_api_key: when set, SCEP PKIOperation requires X-API-Key. (ACME uses account key + JWS signing, not static keys.)
+# auth:
+#   api_keys:
+#     - key: "${CLM_API_KEY_ADMIN}"
+#       role: admin
+#     - key: "${CLM_API_KEY_USER}"
+#       role: user
+#   scep_required_api_key: "${SCEP_API_KEY}"
+
+# Default Subject DN for generated CSRs (CN and OU come from enrollment). Used when CLM generates key+CSR.
+subject_defaults:
+  C: "US"                    # Country (2-letter)
+  ST: "California"           # State or Province
+  L: "San Francisco"         # Locality (city)
+  O: "Acme Corp"             # Organization
+
 app:
   acme_base_url: "http://localhost:8000"
   clm_base_url: "http://localhost:8001"
   # When ACME issues a cert, it POSTs here (optional; leave empty to disable)
   clm_ingest_url: "http://localhost:8001/api/events/issued"
+  # Shared secret so ACME/SCEP can authenticate to CLM (required when CLM login is enabled).
+  # Same value in env CLM_INGEST_SECRET or set here; ACME and CLM both load this config.
+  clm_ingest_secret: "${CLM_INGEST_SECRET}"
 
 # CA-agnostic: list of CAs; "default" is used when no ca_name is specified
 cas:

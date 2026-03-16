@@ -59,8 +59,8 @@ export default function SCEP() {
           <pre className="detail-pre" style={{ marginTop: '0.5rem' }}>{`POST ${urls.PKIOperation}
 Content-Type: application/json
 
-{ "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\\n...\\n-----END CERTIFICATE REQUEST-----", "product_id": "optional" }`}</pre>
-          <p style={{ marginTop: '1rem' }}>3. Set <code>scep.default_product_id</code> in config (or env <code>SCEP_DEFAULT_PRODUCT_ID</code>) to associate SCEP-issued certs with a product.</p>
+{ "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\\n...\\n-----END CERTIFICATE REQUEST-----", "product_id": "required" }`}</pre>
+          <p style={{ marginTop: '1rem' }}>3. <strong>Product ID is required.</strong> Provide <code>product_id</code> in the JSON body, or set <code>scep.default_product_id</code> in config (or env <code>SCEP_DEFAULT_PRODUCT_ID</code>).</p>
         </div>
       </div>
     </>

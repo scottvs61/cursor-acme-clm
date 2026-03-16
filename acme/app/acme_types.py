@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IdentifierType(str, Enum):
@@ -45,7 +45,7 @@ class NewAccountRequest(BaseModel):
     contact: Optional[list[str]] = None
     termsOfServiceAgreed: Optional[bool] = None
     onlyReturnExisting: Optional[bool] = None
-    product_id: Optional[str] = None
+    product_id: str = Field(..., description="Required for all enrollments (mandatory policy)")
 
 
 class AccountResponse(BaseModel):

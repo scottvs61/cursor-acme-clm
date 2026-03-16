@@ -72,3 +72,51 @@ def get_servicenow_config() -> dict[str, Any]:
 
 def get_scep_config() -> dict[str, Any]:
     return get_config().get("scep") or {}
+
+
+def get_subject_defaults() -> dict[str, str]:
+    """Return pre-defined TLS Subject DN fields (C, ST, L, O) for generated CSRs. CN and OU come from enrollment."""
+    return get_config().get("subject_defaults") or {}
+
+
+def get_clm_ingest_secret() -> str:
+    """
+    Shared secret for ACME/SCEP to POST issued certs to CLM without a user JWT.
+    Same value must be in config for CLM and services that call /api/events/issued.
+    Read from app.clm_ingest_secret, top-level clm_ingest_secret, or env CLM_INGEST_SECRET.
+    """
+    cfg = get_config()
+    v = (
+        get_app_config().get("clm_ingest_secret")
+        or cfg.get("clm_ingest_secret")
+        or os.environ.get("CLM_INGEST_SECRET")
+        or ""
+    )
+    return str(v).strip()
+
+
+def get_auth_config() -> dict[str, Any]:
+    """Return auth section: api_keys (list of {key, role}), acme_required_api_key, scep_required_api_key."""
+    return get_config().get("auth") or {}
+
+
+def get_api_keys() -> list[dict[str, str]]:
+    """List of {key: str, role: "admin"|"user"}. If non-empty, CLM API requires X-API-Key and enforces roles."""
+    raw = get_auth_config().get("api_keys") or []
+    out = []
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict) and item.get("key") and item.get("role") in ("admin", "user"):
+            out.append({"key": str(item["key"]).strip(), "role": item["role"]})
+    return out
+
+
+def get_acme_required_api_key() -> str | None:
+    """If set, ACME new-account/new-order/finalize require X-API-Key to match this value."""
+    v = get_auth_config().get("acme_required_api_key")
+    return str(v).strip() or None if v else None
+
+
+def get_scep_required_api_key() -> str | None:
+    """If set, SCEP PKIOperation requires X-API-Key to match this value."""
+    v = get_auth_config().get("scep_required_api_key")
+    return str(v).strip() or None if v else None

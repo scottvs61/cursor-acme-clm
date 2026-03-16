@@ -1,17 +1,24 @@
+/*
+  CLM theme: edit these variables to change the whole GUI.
+  Current: light, neutral palette (enterprise/admin style).
+  For dark theme again, use a second block: .theme-dark { ... } and add class to <html>.
+*/
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface-hover: #21262d;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --accent: #58a6ff;
-  --accent-dim: #388bfd;
-  --success: #3fb950;
-  --warning: #d29922;
-  --error: #f85149;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-hover: #eef0f3;
+  --border: #d1d5db;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --accent: #2563eb;
+  --accent-dim: #1d4ed8;
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
   --radius: 8px;
   --font: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --on-accent: #ffffff;
+  --on-success: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -56,6 +63,26 @@ input, textarea {
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin: 0 1rem 0.75rem;
+}
+.sidebar-user {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0 1rem 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logout {
+  margin: 1rem 1rem 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
+.sidebar-logout:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .sidebar nav button {
   display: block;
@@ -108,14 +135,14 @@ input, textarea {
   font-size: 0.9rem;
   border: none;
   background: var(--accent);
-  color: var(--bg);
+  color: var(--on-accent);
 }
 .btn:hover { opacity: 0.9; }
 .btn-secondary {
   background: var(--border);
   color: var(--text);
 }
-.btn-success { background: var(--success); color: var(--bg); }
+.btn-success { background: var(--success); color: var(--on-success); }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
@@ -152,3 +179,5 @@ tr:hover { background: var(--surface-hover); }
 }
 .form-group textarea { min-height: 120px; resize: vertical; }
 .detail-pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: var(--bg); padding: 1rem; border-radius: 6px; margin: 0; }
+
+.help-doc { max-height: 70vh; }

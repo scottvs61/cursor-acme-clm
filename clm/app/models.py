@@ -1,10 +1,10 @@
-"""Certificate and event records. SQLAlchemy 2.0."""
+"""Certificate, event, user, and service key records. SQLAlchemy 2.0."""
 
 import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from clm.app.db import Base
@@ -12,6 +12,31 @@ from clm.app.db import Base
 
 def _uuid_str() -> str:
     return str(uuid.uuid4())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="user")  # admin | user
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ServiceKey(Base):
+    """Generated keys for ACME, SCEP, or API (stored as hash; plaintext shown once at creation)."""
+
+    __tablename__ = "service_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # SHA-256 hex
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)  # acme | scep | api
+    role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # for api: admin | user
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class CertificateRecord(Base):
@@ -28,6 +53,7 @@ class CertificateRecord(Base):
     not_after: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sha256_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     pem: Mapped[str] = mapped_column(Text, nullable=False)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     events: Mapped[list["EventRecord"]] = relationship("EventRecord", back_populates="certificate", foreign_keys="EventRecord.certificate_id")
 

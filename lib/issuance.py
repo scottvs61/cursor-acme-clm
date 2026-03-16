@@ -23,17 +23,46 @@ class IssuanceError(RuntimeError):
     """Raised when the CA rejects the request or returns an error."""
 
 
+def _get_first_attr(subject: "x509.Name", oid: "NameOID") -> Optional[str]:
+    try:
+        attrs = subject.get_attributes_for_oid(oid)
+        if attrs:
+            return str(attrs[0].value).strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _get_all_attr(subject: "x509.Name", oid: "NameOID") -> list[str]:
+    try:
+        attrs = subject.get_attributes_for_oid(oid)
+        return [str(a.value).strip() for a in attrs if a.value and str(a.value).strip()]
+    except Exception:
+        pass
+    return []
+
+
+def _parse_csr_subject_dn(csr_pem: str) -> dict[str, Any]:
+    """Extract full Subject DN from CSR for DigiCert API (subject.* attributes)."""
+    if not x509:
+        raise IssuanceError("cryptography is required to parse CSR")
+    csr = x509.load_pem_x509_csr(csr_pem.encode("utf-8"))
+    sub = csr.subject
+    return {
+        "country": _get_first_attr(sub, NameOID.COUNTRY_NAME),
+        "state": _get_first_attr(sub, NameOID.STATE_OR_PROVINCE_NAME),
+        "locality": _get_first_attr(sub, NameOID.LOCALITY_NAME),
+        "organization_name": _get_first_attr(sub, NameOID.ORGANIZATION_NAME),
+        "organization_units": _get_all_attr(sub, NameOID.ORGANIZATIONAL_UNIT_NAME),
+        "common_name": _get_first_attr(sub, NameOID.COMMON_NAME),
+    }
+
+
 def _parse_csr_cn_sans(csr_pem: str) -> tuple[Optional[str], list[str]]:
     if not x509:
         raise IssuanceError("cryptography is required to parse CSR")
     csr = x509.load_pem_x509_csr(csr_pem.encode("utf-8"))
-    cn = None
-    try:
-        attrs = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-        if attrs:
-            cn = attrs[0].value
-    except Exception:
-        pass
+    cn = _get_first_attr(csr.subject, NameOID.COMMON_NAME)
     sans: list[str] = []
     try:
         ext = csr.extensions.get_extension_for_oid(x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
@@ -62,9 +91,17 @@ def _issue_digicert_one_tlm(csr_pem: str, product_id: Optional[str], profile_id:
     if not cn:
         raise IssuanceError("CSR has no subject CN; required by DigiCert One TLM profile")
 
+    # DigiCert One TLM often requires SAN DNS names in the request; plain openssl -subj CN=... has no SAN.
+    if not dns_names and cn:
+        dns_names = [cn]
+
+    # Use nested subject object; only common_name is sent. This profile rejects country, state,
+    # locality, organization_name, organization_units in the request. For full Subject DN (C, ST, L,
+    # O, OU) on the issued cert, configure the certificate profile in DigiCert One TLM so those
+    # attributes use source "From CSR". Our CSR already contains the full subject.
     attributes: dict[str, Any] = {
         "tnc_accepted": True,
-        "subject.common_name": cn,
+        "subject": {"common_name": cn},
     }
     if dns_names:
         attributes.setdefault("extensions", {})["san"] = {"dns_names": dns_names}
@@ -158,3 +195,40 @@ def issue_certificate(
     if ca_type == "digicert_certcentral":
         return _issue_digicert_certcentral(csr_pem, product_id, profile_id or "", ca_name=ca_name, **kwargs)
     raise IssuanceError(f"Unknown or unsupported CA type in config: {ca_type!r}. Check config/config.yaml 'cas' section.")
+
+
+def revoke_certificate_at_ca(
+    serial_number: str,
+    revocation_reason: str = "cessation_of_operation",
+    ca_name: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """
+    Revoke a certificate at the configured CA. Returns (success, error_message).
+    Only DigiCert One TLM is supported; other CAs are skipped (success=False, message set).
+    """
+    if not (serial_number or "").strip():
+        return False, "No serial number"
+    serial = serial_number.strip()
+    cfg = get_ca_config(ca_name)
+    ca_type = (cfg.get("type") or "").strip().lower()
+    if ca_type != "digicert_one_tlm":
+        return False, f"CA type {ca_type!r} does not support revocation via this API"
+    base_url = (cfg.get("base_url") or "").rstrip("/")
+    api_key = cfg.get("api_key")
+    if not base_url or not api_key:
+        return False, "DigiCert One TLM: base_url and api_key required in config"
+    url = f"{base_url}/mpki/api/v1/certificate/{serial}/revoke"
+    headers = {
+        "x-api-key": str(api_key),
+        "content-type": "application/json",
+        "accept": "application/json",
+    }
+    body: dict[str, Any] = {"revocation_reason": revocation_reason}
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.put(url, headers=headers, json=body)
+    except Exception as e:
+        return False, str(e)
+    if r.status_code in (200, 204):
+        return True, None
+    return False, f"HTTP {r.status_code}: {r.text}"

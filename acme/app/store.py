@@ -17,6 +17,7 @@ from acme.app.acme_types import (
 class Account:
     key_id: str
     jwk_thumbprint: str
+    jwk: Optional[dict] = None  # Public key (JWK) for JWS signature verification
     contact: Optional[list[str]] = None
     product_id: Optional[str] = None
     status: AccountStatus = AccountStatus.valid
@@ -66,8 +67,9 @@ class Store:
         jwk_thumbprint: str,
         contact: Optional[list[str]] = None,
         product_id: Optional[str] = None,
+        jwk: Optional[dict] = None,
     ) -> Account:
-        acc = Account(key_id=key_id, jwk_thumbprint=jwk_thumbprint, contact=contact, product_id=product_id)
+        acc = Account(key_id=key_id, jwk_thumbprint=jwk_thumbprint, jwk=jwk, contact=contact, product_id=product_id)
         self._accounts[key_id] = acc
         self._accounts_by_thumbprint[jwk_thumbprint] = key_id
         return acc

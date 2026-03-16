@@ -45,11 +45,18 @@ def parse_csr_or_cert_pem(pem: str) -> dict[str, Any]:
         cert = None
     if cert is not None:
         fingerprint = hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
+        # Prefer UTC attributes to avoid CryptographyDeprecationWarning (naïve datetime deprecated)
+        not_before = getattr(cert, "not_valid_before_utc", None)
+        if not_before is None:
+            not_before = getattr(cert, "not_valid_before", None)
+        not_after = getattr(cert, "not_valid_after_utc", None)
+        if not_after is None:
+            not_after = getattr(cert, "not_valid_after", None)
         return {
             "kind": "certificate",
             "serial_number": format(cert.serial_number, "x").upper(),
-            "not_before": getattr(cert, "not_valid_before_utc", cert.not_valid_before),
-            "not_after": getattr(cert, "not_valid_after_utc", cert.not_valid_after),
+            "not_before": not_before,
+            "not_after": not_after,
             "common_name": _cn_from_subject(cert.subject),
             "sans_dns": _sans_dns_from_cert(cert),
             "sha256_fingerprint": fingerprint,

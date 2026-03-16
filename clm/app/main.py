@@ -14,6 +14,8 @@ if str(_repo) not in sys.path:
 
 from lib.config import load_config
 
+from clm.app.admin_router import router as admin_router
+from clm.app.auth_router import router as auth_router
 from clm.app.db import init_db
 from clm.app.routes import router
 
@@ -35,6 +37,8 @@ def startup():
     init_db()
 
 app.include_router(router, prefix="/api", tags=["api"])
+app.include_router(auth_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 @app.get("/health")
@@ -42,10 +46,21 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-# Serve frontend (frontend/ or frontend/dist)
+# Serve frontend: use built React app (frontend/dist) if it exists; else show build instructions
 _frontend_dist = _repo / "frontend" / "dist"
 _frontend_src = _repo / "frontend"
 if _frontend_dist.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
-elif (_frontend_src / "index.html").exists():
-    app.mount("/", StaticFiles(directory=str(_frontend_src), html=True), name="frontend")
+else:
+    @app.get("/")
+    def _frontend_placeholder():
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            status_code=200,
+            content="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>CLM</title></head><body style="font-family:sans-serif;max-width:600px;margin:2rem auto;padding:1rem;">
+            <h1>Certificate Lifecycle Manager</h1>
+            <p>The GUI is not built yet. From the repo root run:</p>
+            <pre style="background:#f0f0f0;padding:1rem;overflow:auto;">cd frontend && npm install && npm run build && cd ..</pre>
+            <p>Then restart the CLM server. API is available at <a href="/health">/health</a> and <a href="/api/certificates">/api/certificates</a>.</p>
+            </body></html>""",
+        )

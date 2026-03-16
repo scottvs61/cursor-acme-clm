@@ -1,0 +1,33 @@
+.admin { padding: 0 1rem; }
+.admin-tabs { margin-bottom: 1rem; }
+.admin-tabs button {
+  margin-right: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.admin-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.admin-hint, .admin-message { font-size: 0.9rem; color: var(--text-muted); margin: 0.5rem 0; }
+.admin-error { color: var(--error, #c00); margin: 0.5rem 0; }
+.admin-loading, .admin-forbidden { padding: 2rem; }
+.admin-generate { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; flex-wrap: wrap; }
+.admin-generate select { padding: 0.4rem 0.6rem; }
+.admin-generated-key {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.admin-key-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+.admin-key-row code { flex: 1; word-break: break-all; font-size: 0.85rem; }
+.admin-key-meta { font-size: 0.85rem; color: var(--text-muted); margin: 0.5rem 0 0 0; }
+.admin-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+.admin-table th, .admin-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border); }
+.admin-table select { padding: 0.25rem 0.4rem; }
+.admin-add-user { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+.admin-add-user input, .admin-add-user select { padding: 0.4rem 0.6rem; }
+.admin-delete { color: var(--error, #c00); background: none; border: none; cursor: pointer; font-size: 0.9rem; }
+.admin-empty { color: var(--text-muted); font-size: 0.9rem; }
